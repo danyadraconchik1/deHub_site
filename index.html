@@ -1,0 +1,184 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Key Generator</title>
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body {
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+    background: #0f0f12;
+    color: #f0f0f5;
+    min-height: 100vh;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 20px;
+  }
+  .card {
+    background: #16161b;
+    border: 1px solid #2d2d37;
+    border-radius: 16px;
+    padding: 40px;
+    max-width: 480px;
+    width: 100%;
+    box-shadow: 0 20px 60px rgba(0,0,0,0.5);
+  }
+  h1 { font-size: 24px; font-weight: 700; margin-bottom: 8px; }
+  .subtitle { color: #8c8c9b; font-size: 14px; margin-bottom: 32px; }
+  .btn {
+    background: #6366f1;
+    color: white;
+    border: none;
+    border-radius: 10px;
+    padding: 14px 24px;
+    font-size: 15px;
+    font-weight: 600;
+    cursor: pointer;
+    width: 100%;
+    transition: background 0.15s;
+  }
+  .btn:hover { background: #4f46e5; }
+  .btn:disabled { background: #2d2d37; color: #5c5c6b; cursor: not-allowed; }
+  .btn-copy { background: #23232b; color: #f0f0f5; margin-top: 12px; }
+  .btn-copy:hover { background: #2d2d37; }
+  .key-box {
+    background: #0f0f12;
+    border: 1px solid #2d2d37;
+    border-radius: 10px;
+    padding: 16px;
+    font-family: 'Courier New', monospace;
+    font-size: 18px;
+    letter-spacing: 1px;
+    text-align: center;
+    color: #6366f1;
+    font-weight: 700;
+    margin-top: 20px;
+    word-break: break-all;
+    user-select: all;
+  }
+  .hidden { display: none; }
+  .status {
+    margin-top: 16px;
+    font-size: 13px;
+    color: #8c8c9b;
+    text-align: center;
+    min-height: 20px;
+  }
+  .status.error { color: #ef4444; }
+  .status.success { color: #22c55e; }
+  .info {
+    margin-top: 24px;
+    padding-top: 20px;
+    border-top: 1px solid #2d2d37;
+    font-size: 12px;
+    color: #5c5c6b;
+    line-height: 1.6;
+  }
+</style>
+</head>
+<body>
+
+<div class="card">
+  <h1>🔑 Get Key</h1>
+  <p class="subtitle">Key is valid for 24 hours after generation</p>
+
+  <button class="btn" id="genBtn">Generate Key</button>
+
+  <div id="resultBox" class="hidden">
+    <div class="key-box" id="keyText">-</div>
+    <button class="btn btn-copy" id="copyBtn">📋 Copy Key</button>
+  </div>
+
+  <div class="status" id="status"></div>
+
+  <div class="info">
+    After generating, copy the key and enter it in the script.<br>
+    The key will be automatically deleted from the database after 24 hours.
+  </div>
+</div>
+
+<script type="module">
+import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-app.js";
+import { getFirestore, collection, addDoc, serverTimestamp }
+  from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
+
+const firebaseConfig = {
+  apiKey: "AIzaSyDG8Nb48bUdRQjRn8B1a-pukxnvzD2FEt8",
+  authDomain: "de-hub-lumber-key-syste.firebaseapp.com",
+  projectId: "de-hub-lumber-key-syste",
+  storageBucket: "de-hub-lumber-key-syste.firebasestorage.app",
+  messagingSenderId: "953880540740",
+  appId: "1:953880540740:web:27a624be50668b8c6aae11",
+  measurementId: "G-2ZH4E538LZ"
+};
+
+const app = initializeApp(firebaseConfig);
+const db  = getFirestore(app);
+
+const genBtn    = document.getElementById('genBtn');
+const copyBtn   = document.getElementById('copyBtn');
+const resultBox = document.getElementById('resultBox');
+const keyText   = document.getElementById('keyText');
+const status    = document.getElementById('status');
+
+let currentKey = '';
+
+function generateKey() {
+  const chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789';
+  let key = 'KEY-';
+  for (let i = 0; i < 4; i++) {
+    for (let j = 0; j < 4; j++) {
+      key += chars.charAt(Math.floor(Math.random() * chars.length));
+    }
+    if (i < 3) key += '-';
+  }
+  return key;
+}
+
+function setStatus(text, type = '') {
+  status.textContent = text;
+  status.className = 'status ' + type;
+}
+
+genBtn.addEventListener('click', async () => {
+  genBtn.disabled = true;
+  setStatus('Generating key...');
+
+  try {
+    const key = generateKey();
+    const now = new Date();
+    const expiresAt = new Date(now.getTime() + 24 * 60 * 60 * 1000);
+
+    await addDoc(collection(db, 'keys'), {
+      key: key,
+      createdAt: serverTimestamp(),
+      expireAt: expiresAt,
+      used: false
+    });
+
+    currentKey = key;
+    keyText.textContent = key;
+    resultBox.classList.remove('hidden');
+    setStatus('Key created. Valid for 24 hours.', 'success');
+  } catch (err) {
+    console.error(err);
+    setStatus('Error: ' + err.message, 'error');
+    genBtn.disabled = false;
+  }
+});
+
+copyBtn.addEventListener('click', async () => {
+  if (!currentKey) return;
+  try {
+    await navigator.clipboard.writeText(currentKey);
+    setStatus('Key copied!', 'success');
+  } catch (e) {
+    setStatus('Copy failed. Select manually.', 'error');
+  }
+});
+</script>
+
+</body>
+</html>
